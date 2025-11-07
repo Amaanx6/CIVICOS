@@ -5,10 +5,15 @@ import { Menu, X, Moon, Sun } from "lucide-react"
 import { useState } from "react"
 import { useTheme } from "next-themes"
 import { motion } from "framer-motion"
+import { usePathname } from "next/navigation"
 
 export function Navbar() {
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const { theme, setTheme } = useTheme()
+
+  // Hide navbar on landing page
+  if (pathname === "/") return null
 
   const navLinks = [
     { href: "/", label: "Home" },

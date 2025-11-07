@@ -1,44 +1,47 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/app/_components/navbar"
 import { Footer } from "@/app/_components/footer"
 import { motion } from "framer-motion"
 import { LogOut, BarChart3, AlertCircle, CheckCircle, Clock, MapPin, TrendingUp } from "lucide-react"
-
-interface UserData {
-  username: string
-  name: string
-  email: string
-  area: string
-  gender: string
-}
+import { useUserDetails } from "@/lib/cache/index"
+import axios from "axios"
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [user, setUser] = useState<UserData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+  const id = typeof window !== "undefined" ? localStorage.getItem("id") : null
 
-  useEffect(() => {
-    const stored = localStorage.getItem("user")
-    if (!stored) {
-      router.push("/login")
-    } else {
-      setUser(JSON.parse(stored))
-      setLoading(false)
-    }
-  }, [router])
+  const email = localStorage.getItem("email")
+
+  const { data: user, isLoading, isError } = useUserDetails(email!);
 
   const handleLogout = () => {
-    localStorage.removeItem("user")
+    localStorage.removeItem("token")
+    localStorage.removeItem("id")
     router.push("/login")
   }
 
-  if (loading || !user) {
+  useEffect(() => {
+    if (!token || !id) {
+      router.push("/login")
+    }
+  }, [token, id, router])
+
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-dark-blue"></div>
+      </div>
+    )
+  }
+
+  if (isError || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Error fetching user data. Please login again.</p>
       </div>
     )
   }
@@ -93,29 +96,33 @@ export default function DashboardPage() {
                 <h3 className="text-sm font-medium text-muted-foreground mb-4">Profile Information</h3>
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs text-muted-foreground">Username</p>
-                    <p className="font-semibold">{user.username}</p>
+                    <p className="text-xs text-muted-foreground">Name</p>
+                    <p className="font-semibold">{user.name}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Email</p>
                     <p className="font-semibold">{user.email}</p>
                   </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Constituency</p>
+                    <p className="font-semibold">{user.constituency}</p>
+                  </div>
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-4">Location</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-4">Linked MLAs</h3>
                 <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Area</p>
-                    <p className="font-semibold flex items-center gap-2">
-                      <MapPin size={16} className="text-primary-dark-blue" />
-                      {user.area}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Gender</p>
-                    <p className="font-semibold">{user.gender}</p>
-                  </div>
+                  {user.linked_MLAs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No MLAs linked</p>
+                  ) : (
+                    user.linked_MLAs.map((mla) => (
+                      <div key={mla.id} className="p-2 border border-border rounded-lg">
+                        <p className="font-semibold">{mla.name}</p>
+                        <p className="text-xs text-muted-foreground">{mla.party}</p>
+                        <p className="text-xs text-muted-foreground">{mla.email}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -153,12 +160,11 @@ export default function DashboardPage() {
             </div>
 
             <div className="space-y-4">
-              {mockIssues.map((issue, i) => (
+              {mockIssues.map((issue) => (
                 <motion.div
-                  key={i}
+                  key={issue.id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 + i * 0.1 }}
                   className="border border-border rounded-lg p-4 hover:bg-muted/50 transition"
                 >
                   <div className="flex justify-between items-start">
@@ -175,8 +181,8 @@ export default function DashboardPage() {
                         issue.status === "Resolved"
                           ? "bg-green-500/10 text-green-600"
                           : issue.status === "In Progress"
-                            ? "bg-yellow-500/10 text-yellow-600"
-                            : "bg-gray-500/10 text-gray-600"
+                          ? "bg-yellow-500/10 text-yellow-600"
+                          : "bg-gray-500/10 text-gray-600"
                       }`}
                     >
                       {issue.status}

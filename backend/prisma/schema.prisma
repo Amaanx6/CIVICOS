@@ -55,6 +55,7 @@ model Citizen {
   name                 String
   email                String           @unique
   password             String
+  constituency         String           @default("khairtabad")
   linked_MLAs          MLA[]            @relation("CitizenMLAs")
   linked_Organizations Organization[]   @relation("CitizenOrganizations")
   issues               Issue[]

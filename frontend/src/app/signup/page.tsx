@@ -1,21 +1,30 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import React, { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-
+import axios from "axios"
 import { motion } from "framer-motion"
 import { Eye, EyeOff, User, Mail, Lock, MapPin } from "lucide-react"
 import { Navbar } from "@/app/_components/navbar"
 import { Footer } from "@/app/_components/footer"
 
-const TELANGANA_AREAS = [
+
+const CONSTITUENCIES = [
+  "Sirpur",
+  "Khairtabad",
+  "Secunderabad",
+  "Musheerabad",
+  "Sanathnagar",
+  "Amberpet",
+  "Asifnagar",
+  "Karwan",
+  "Bahadurpura",
+  "Nampally",
+  "Himayatnagar",
   "Jubilee Hills",
   "Banjara Hills",
   "Hyderabad Central",
-  "Secunderabad",
   "Kukatpally",
   "Manikonda",
   "Madhapur",
@@ -25,26 +34,43 @@ const TELANGANA_AREAS = [
   "Kondapur",
   "Begumpet",
   "Kachiguda",
-  "Malakpet",
+  "Malakpet"
 ]
 
 export default function SignupPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
-    username: "",
     name: "",
     email: "",
     password: "",
-    area: "",
-    gender: "",
+    constituency: "",
   })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Mock signup - save to localStorage and redirect to dashboard
-    localStorage.setItem("user", JSON.stringify(formData))
-    router.push("/dashboard")
+    setLoading(true)
+    setError("")
+
+    try {
+      const response = await axios.post(
+        "https://civiciobackend.vercel.app/api/v1/auth/signup",
+        formData
+      )
+
+      if (response.status === 201 || response.status === 200) {
+        router.push("/login")
+      } else {
+        setError("Signup failed. Please try again.")
+      }
+    } catch (err: any) {
+      console.error(err)
+      setError(err.response?.data?.message || "Signup failed. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -59,7 +85,6 @@ export default function SignupPage() {
           className="w-full max-w-md"
         >
           <div className="bg-card border border-border rounded-lg p-8 space-y-6">
-            {/* Header */}
             <div className="text-center">
               <div className="w-16 h-16 bg-primary-dark-blue rounded-lg flex items-center justify-center mx-auto mb-4">
                 <span className="text-white text-2xl">🇮🇳</span>
@@ -68,24 +93,7 @@ export default function SignupPage() {
               <p className="text-muted-foreground mt-2">Create your Indian Citizen account</p>
             </div>
 
-            {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Username */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Username</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 text-primary-dark-blue" size={20} />
-                  <input
-                    type="text"
-                    placeholder="username"
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary-dark-blue"
-                    required
-                  />
-                </div>
-              </div>
-
               {/* Name */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium">Full Name</label>
@@ -141,46 +149,30 @@ export default function SignupPage() {
                 </div>
               </div>
 
-              {/* Area (Telangana Dropdown) */}
+              {/* Constituency */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium">Area (Telangana)</label>
+                <label className="block text-sm font-medium">Constituency</label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 text-primary-dark-blue" size={20} />
                   <select
-                    value={formData.area}
-                    onChange={(e) => setFormData({ ...formData, area: e.target.value })}
+                    value={formData.constituency}
+                    onChange={(e) =>
+                      setFormData({ ...formData, constituency: e.target.value })
+                    }
                     className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary-dark-blue appearance-none"
                     required
                   >
-                    <option value="">Select your area</option>
-                    {TELANGANA_AREAS.map((area) => (
-                      <option key={area} value={area}>
-                        {area}
+                    <option value="">Select your constituency</option>
+                    {CONSTITUENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              {/* Gender */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Gender</label>
-                <div className="flex gap-4">
-                  {["Male", "Female", "Other"].map((opt) => (
-                    <label key={opt} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="gender"
-                        value={opt}
-                        checked={formData.gender === opt}
-                        onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                        className="w-4 h-4 accent-primary-dark-blue"
-                      />
-                      <span className="text-sm">{opt}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
 
               {/* Submit Button */}
               <motion.button
@@ -188,12 +180,12 @@ export default function SignupPage() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 className="w-full bg-primary-dark-blue text-white font-semibold py-2 rounded-lg hover:bg-primary-dark-blue-light transition"
+                disabled={loading}
               >
-                Create Account
+                {loading ? "Creating Account..." : "Create Account"}
               </motion.button>
             </form>
 
-            {/* Divider */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-border"></div>
@@ -203,20 +195,12 @@ export default function SignupPage() {
               </div>
             </div>
 
-            {/* Login Link */}
             <Link
               href="/login"
               className="w-full border border-border text-center py-2 rounded-lg font-medium hover:bg-muted transition"
             >
               Login
             </Link>
-          </div>
-
-          {/* Demo Info */}
-          <div className="mt-6 p-4 bg-primary-dark-blue/10 rounded-lg text-center text-sm text-muted-foreground">
-            <p>
-              <strong>No Validation:</strong> Just for UI testing!
-            </p>
           </div>
         </motion.div>
       </main>

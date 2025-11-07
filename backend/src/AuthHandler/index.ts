@@ -14,10 +14,10 @@ authHandler.get("/health", (req, res) => {
 
 authHandler.post("/signUp", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, constituency } = req.body; 
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: "All fields are required" });
+    if (!name || !email || !password || !constituency) {
+      return res.status(400).json({ error: "All fields (name, email, password, constituency) are required" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -30,7 +30,7 @@ authHandler.post("/signUp", async (req, res) => {
       if (existing) return res.status(409).json({ error: "MLA already exists" });
 
       const newMLA = await prisma.mLA.create({
-        data: { name, email },
+        data: { name, email, constituency }, 
       });
 
       return res.status(201).json({
@@ -48,7 +48,7 @@ authHandler.post("/signUp", async (req, res) => {
         return res.status(409).json({ error: "Organization already exists" });
 
       const newOrg = await prisma.organization.create({
-        data: { name, category: "General", contact_email: email },
+        data: { name, category: "General", contact_email: email, constituency }, // Store constituency
       });
 
       return res.status(201).json({
@@ -63,9 +63,27 @@ authHandler.post("/signUp", async (req, res) => {
     if (existingCitizen)
       return res.status(409).json({ error: "Citizen already exists" });
 
+    // Link MLAs and Organizations during signup
+    const mlas = await prisma.mLA.findMany({ where: { constituency } });
+    const orgs = await prisma.organization.findMany({ where: { constituency } });
+
     const newCitizen = await prisma.citizen.create({
-      data: { name, email, password: hashedPassword },
-      select: { id: true, name: true, email: true },
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        constituency, // STORE constituency
+        linked_MLAs: { connect: mlas.map((mla) => ({ id: mla.id })) },
+        linked_Organizations: { connect: orgs.map((org) => ({ id: org.id })) },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        constituency: true,
+        linked_MLAs: { select: { name: true } },
+        linked_Organizations: { select: { name: true } },
+      },
     });
 
     return res.status(201).json({
@@ -83,29 +101,23 @@ authHandler.post("/signUp", async (req, res) => {
 const JWT_SECRET = process.env.JWT_SECRET;
 
 authHandler.post("/login", async (req, res) => {
-  const { email, password, constituency } = req.body;
+  const { email, password } = req.body; 
 
   try {
-    const citizen = await prisma.citizen.findUnique({ where: { email } });
+    const citizen = await prisma.citizen.findUnique({
+      where: { email },
+      include: {
+        linked_MLAs: true,
+        linked_Organizations: true,
+      },
+    });
+
     if (!citizen) {
       return res.status(404).json({ message: "Citizen not found" });
     }
 
     const valid = await bcrypt.compare(password, citizen.password);
     if (!valid) return res.status(401).json({ message: "Invalid password" });
-
-    
-    const mlas = await prisma.mLA.findMany({ where: { constituency } });
-    const orgs = await prisma.organization.findMany({ where: { constituency } });
-
-    
-    await prisma.citizen.update({
-      where: { id: citizen.id },
-      data: {
-        linked_MLAs: { connect: mlas.map((mla) => ({ id: mla.id })) },
-        linked_Organizations: { connect: orgs.map((org) => ({ id: org.id })) },
-      },
-    });
 
     
     const token = jwt.sign(
@@ -123,11 +135,20 @@ authHandler.post("/login", async (req, res) => {
       message: "Login successful",
       token,
       citizen: {
-        id: citizen.id, 
+        id: citizen.id,
+        name: citizen.name,
         email: citizen.email,
-        constituency,
-        linked_MLAs: mlas.map((m) => m.name),
-        linked_Organizations: orgs.map((o) => o.name),
+        constituency: citizen.constituency,
+        linked_MLAs: citizen.linked_MLAs.map((m) => ({
+          id: m.id,
+          name: m.name,
+          party: m.party,
+        })),
+        linked_Organizations: citizen.linked_Organizations.map((o) => ({
+          id: o.id,
+          name: o.name,
+          category: o.category,
+        })),
       },
     });
   } catch (error) {
