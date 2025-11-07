@@ -17,6 +17,11 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
+  // Check if email is MLA or Authority
+  const isMlaOrAuthority = 
+    formData.email.endsWith("@mla.com") || 
+    formData.email.endsWith("@authority.com")
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -25,12 +30,19 @@ export default function LoginPage() {
     try {
       console.log("Attempting login with:", formData.email)
       
+      // Prepare request body - only include password for citizens
+      const requestBody: any = {
+        email: formData.email,
+      }
+      
+      // Only add password if it's a citizen (not MLA or Authority)
+      if (!isMlaOrAuthority) {
+        requestBody.password = formData.password
+      }
+      
       const response = await axios.post(
         "https://civiciobackend.vercel.app/api/v1/auth/login",
-        {
-          email: formData.email,
-          password: formData.password,
-        }
+        requestBody
       )
 
       console.log("Login response:", response.data)
@@ -40,34 +52,36 @@ export default function LoginPage() {
         throw new Error("No response data received")
       }
 
-      const { token, citizen } = response.data
+      const { token, role, citizen, user } = response.data
 
       // Validate response structure
       if (!token) {
         throw new Error("No token received from server")
       }
 
-      if (!citizen || !citizen.id || !citizen.email) {
-        throw new Error("Invalid citizen data received")
-      }
-
       // Store auth data
       localStorage.setItem("token", token)
-      localStorage.setItem("id", citizen.id)
-      localStorage.setItem("email", citizen.email)
-      
-      // Optional: Store additional user data
-      if (citizen.name) localStorage.setItem("name", citizen.name)
-      if (citizen.constituency) localStorage.setItem("constituency", citizen.constituency)
+      localStorage.setItem("role", role || "citizen")
 
-      console.log("Login successful, redirecting to dashboard...")
+      // Store user data
+      const userData = citizen || user
+      if (userData) {
+        if (userData.id) localStorage.setItem("id", userData.id)
+        if (userData.email) localStorage.setItem("email", userData.email)
+        if (userData.name) localStorage.setItem("name", userData.name)
+        if (userData.constituency) localStorage.setItem("constituency", userData.constituency)
+      }
 
-      // Use window.location for a hard redirect (more reliable)
-      window.location.href = "/dashboard"
-      
-      // Alternative: Use Next.js router (uncomment if you prefer this)
-      // router.push("/dashboard")
-      // router.refresh()
+      console.log(`Login successful as ${role}, redirecting...`)
+
+      // Simple role-based redirect
+      if (role === "mla") {
+        window.location.href = "/mla/dashboard"
+      } else if (role === "authority") {
+        window.location.href = "/authority/dashboard"
+      } else {
+        window.location.href = "/citizen/dashboard"
+      }
 
     } catch (err: any) {
       console.error("Login error:", err)
@@ -130,30 +144,39 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Password */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 text-primary" size={20} />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full pl-10 pr-10 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                    required
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-primary"
-                    disabled={isLoading}
-                  >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
+              {/* Password - Only show for citizens */}
+              {!isMlaOrAuthority && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 text-primary" size={20} />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full pl-10 pr-10 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                      required
+                      disabled={isLoading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-3 text-primary"
+                      disabled={isLoading}
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Info message for MLA/Authority */}
+              {isMlaOrAuthority && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 px-4 py-3 rounded-lg text-sm">
+                  No password required for MLA/Authority login
+                </div>
+              )}
 
               {/* Submit Button */}
               <motion.button
@@ -184,7 +207,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            
+            {/* Sign Up Link */}
             <Link
               href="/signup"
               className="block w-full border border-border text-center py-2 rounded-lg font-medium hover:bg-muted transition"

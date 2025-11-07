@@ -7,7 +7,7 @@ import { Footer } from "@/app/_components/footer"
 import { motion } from "framer-motion"
 import { LogOut, BarChart3, AlertCircle, CheckCircle, Clock, MapPin, TrendingUp } from "lucide-react"
 import { useUserDetails } from "@/lib/cache/index"
-import axios from "axios"
+
 
 export default function DashboardPage() {
   const router = useRouter()
