@@ -1,0 +1,56 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Citizen {
+  id                   String   @id @default(uuid())
+  name                 String
+  email                String   @unique
+  password             String
+  linked_MLAs          MLA[]           @relation("CitizenMLAs")
+  linked_Organizations Organization[]  @relation("CitizenOrganizations")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model MLA {
+  id           String    @id @default(uuid())
+  name         String
+  constituency String    @default("Khairtabad")
+  party        String?
+  email        String?    @unique
+  phone        String?
+  image        String?
+  citizens     Citizen[] @relation("CitizenMLAs")
+
+  totalComplaints    Int     @default(0)
+  resolvedComplaints Int     @default(0)
+  rating             Float?  
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Organization {
+  id                String    @id @default(uuid())
+  name              String
+  category          String    
+  constituency      String    @default("Khairtabad")
+  contact_email     String?    @unique
+  contact_phone     String?
+  address           String?
+  citizens          Citizen[] @relation("CitizenOrganizations")
+
+  totalComplaints    Int     @default(0)
+  resolvedComplaints Int     @default(0)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
