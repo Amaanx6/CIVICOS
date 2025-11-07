@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 const prisma = new PrismaClient();
 export const authHandler = Router();
@@ -79,18 +80,17 @@ authHandler.post("/signUp", async (req, res) => {
 });
 
 
+const JWT_SECRET = process.env.JWT_SECRET;
 
 authHandler.post("/login", async (req, res) => {
   const { email, password, constituency } = req.body;
 
   try {
-    
     const citizen = await prisma.citizen.findUnique({ where: { email } });
     if (!citizen) {
       return res.status(404).json({ message: "Citizen not found" });
     }
 
-    
     const valid = await bcrypt.compare(password, citizen.password);
     if (!valid) return res.status(401).json({ message: "Invalid password" });
 
@@ -98,7 +98,6 @@ authHandler.post("/login", async (req, res) => {
     const mlas = await prisma.mLA.findMany({ where: { constituency } });
     const orgs = await prisma.organization.findMany({ where: { constituency } });
 
-    
     await prisma.citizen.update({
       where: { id: citizen.id },
       data: {
@@ -107,8 +106,20 @@ authHandler.post("/login", async (req, res) => {
       },
     });
 
+    
+    const token = jwt.sign(
+      {
+        userId: citizen.id,
+        email: citizen.email,
+        role: "citizen",
+      },
+      JWT_SECRET!,
+      { expiresIn: "7d" } 
+    );
+
     return res.status(200).json({
       message: "Login successful",
+      token,
       citizen: {
         email: citizen.email,
         constituency,

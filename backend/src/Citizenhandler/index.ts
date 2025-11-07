@@ -36,7 +36,7 @@ citizenHandler.get("/details", async (req, res) => {
         id: citizen.id,
         name: citizen.name,
         email: citizen.email,
-        constituency: "Khairtabad", // (for now hardcoded)
+        constituency: "Khairtabad", 
         linked_MLAs: citizen.linked_MLAs.map((mla) => ({
           id: mla.id,
           name: mla.name,

@@ -16,6 +16,7 @@ exports.authHandler = void 0;
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
 const bcrypt_1 = __importDefault(require("bcrypt"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma = new client_1.PrismaClient();
 exports.authHandler = (0, express_1.Router)();
 // Health check
@@ -78,6 +79,7 @@ exports.authHandler.post("/signUp", (req, res) => __awaiter(void 0, void 0, void
         return res.status(500).json({ error: "Internal server error" });
     }
 }));
+const JWT_SECRET = process.env.JWT_SECRET;
 exports.authHandler.post("/login", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { email, password, constituency } = req.body;
     try {
@@ -97,8 +99,14 @@ exports.authHandler.post("/login", (req, res) => __awaiter(void 0, void 0, void 
                 linked_Organizations: { connect: orgs.map((org) => ({ id: org.id })) },
             },
         });
+        const token = jsonwebtoken_1.default.sign({
+            userId: citizen.id,
+            email: citizen.email,
+            role: "citizen",
+        }, JWT_SECRET, { expiresIn: "7d" });
         return res.status(200).json({
             message: "Login successful",
+            token,
             citizen: {
                 email: citizen.email,
                 constituency,
