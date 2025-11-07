@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const handleLogout = () => {
     localStorage.removeItem("token")
     localStorage.removeItem("id")
+    localStorage.removeItem("email")
     router.push("/login")
   }
 
