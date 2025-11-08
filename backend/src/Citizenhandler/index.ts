@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { sendIssueCreatedEmail } from "./emailService"; 
 
 const prisma = new PrismaClient();
 export const citizenHandler = Router();
@@ -107,6 +108,8 @@ citizenHandler.get("/details", async (req, res) => {
 
 
 
+// Add the correct import path
+
 citizenHandler.post("/issue", async (req, res) => {
   const {
     update,
@@ -198,6 +201,28 @@ citizenHandler.post("/issue", async (req, res) => {
         ...(organizationId && { organizationId }),
       },
     });
+    
+    // Send confirmation email to citizen
+    try {
+      await sendIssueCreatedEmail(
+        citizenExists.email,
+        citizenExists.name,
+        {
+          id: newIssue.id,
+          title: newIssue.title,
+          description: newIssue.description,
+          category: newIssue.category,
+          priority: newIssue.severity,
+          status: newIssue.status,
+          location: newIssue.location,
+          createdAt: newIssue.createdAt.toISOString(),
+        }
+      );
+      console.log("✅ Confirmation email sent to:", citizenExists.email);
+    } catch (emailError) {
+      console.error("❌ Failed to send confirmation email:", emailError);
+      // Don't fail the request if email fails - issue was still created
+    }
     
     return res.status(201).json({
       message: "Issue created successfully",

@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.citizenHandler = void 0;
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
+const emailService_1 = require("./emailService");
 const prisma = new client_1.PrismaClient();
 exports.citizenHandler = (0, express_1.Router)();
 exports.citizenHandler.get("/details", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -107,6 +108,7 @@ exports.citizenHandler.get("/details", (req, res) => __awaiter(void 0, void 0, v
         });
     }
 }));
+// Add the correct import path
 exports.citizenHandler.post("/issue", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { update, issueId, title, description, category, mediaUrl, location, latitude, longitude, citizenId, mlaId, organizationId, status, severity, } = req.body;
     try {
@@ -160,6 +162,24 @@ exports.citizenHandler.post("/issue", (req, res) => __awaiter(void 0, void 0, vo
                 location }, (latitude && { latitude: parseFloat(latitude) })), (longitude && { longitude: parseFloat(longitude) })), { status: "PENDING", severity: (severity || "LOW"), // Cast to enum type
                 citizenId }), (mlaId && { mlaId })), (organizationId && { organizationId })),
         });
+        // Send confirmation email to citizen
+        try {
+            yield (0, emailService_1.sendIssueCreatedEmail)(citizenExists.email, citizenExists.name, {
+                id: newIssue.id,
+                title: newIssue.title,
+                description: newIssue.description,
+                category: newIssue.category,
+                priority: newIssue.severity,
+                status: newIssue.status,
+                location: newIssue.location,
+                createdAt: newIssue.createdAt.toISOString(),
+            });
+            console.log("✅ Confirmation email sent to:", citizenExists.email);
+        }
+        catch (emailError) {
+            console.error("❌ Failed to send confirmation email:", emailError);
+            // Don't fail the request if email fails - issue was still created
+        }
         return res.status(201).json({
             message: "Issue created successfully",
             issue: newIssue,

@@ -235,7 +235,7 @@ export default function ReportIssue() {
             <p className="text-gray-600">Help improve your city by reporting civic issues</p>
             {user?.currentMLA && (
               <p className="text-sm text-blue-600 mt-2">
-                📍 Your MLA: {user.currentMLA.name} ({user.constituency})
+              
               </p>
             )}
           </div>

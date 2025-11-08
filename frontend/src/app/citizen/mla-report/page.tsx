@@ -1,580 +1,569 @@
 "use client"
 
-import { useState } from "react"
-import { motion } from "framer-motion"
-import { CheckCircle, Clock, BarChart3, MapPin, Mail, Phone, TrendingUp, AlertCircle, Users, Activity, Building2, Award, Target } from "lucide-react"
-import { Navbar } from "@/app/_components/navbar"
+import { useState, useEffect } from "react"
+import { Upload, CheckCircle, Loader2, AlertCircle, Sparkles } from "lucide-react"
+import { GoogleGenAI } from "@google/genai"
+import { useUserDetails } from "@/lib/cache/index"
 
-interface MLAData {
-  id: string
-  name: string
-  constituency: string
-  party: string
-  contact: string
-  phone: string
-  image: string
-  performanceScore: number
-  issuesResolved: number
-  issuesPending: number
-  averageResolutionTime: number
-  responseRate: number
-  categories: {
-    name: string
-    resolved: number
-    total: number
-  }[]
-}
+export default function ReportIssue() {
+  const [email, setEmail] = useState<string>("")
+  const { data: user, isLoading: isLoadingUser } = useUserDetails(email)
 
-const mockMLAs: MLAData[] = [
-  {
-    id: "1",
-    name: "Shri. Rajesh Kumar",
-    constituency: "Jubilee Hills",
-    party: "Bharatiya Janata Party",
-    contact: "rajesh.kumar@mla.gov.in",
-    phone: "+91 98765 43210",
-    image: "/api/placeholder/80/80",
-    performanceScore: 8.5,
-    issuesResolved: 156,
-    issuesPending: 24,
-    averageResolutionTime: 8,
-    responseRate: 92,
-    categories: [
-      { name: "Road Damage", resolved: 42, total: 45 },
-      { name: "Water Supply", resolved: 38, total: 40 },
-      { name: "Street Lights", resolved: 35, total: 38 },
-      { name: "Drainage", resolved: 26, total: 32 },
-      { name: "Others", resolved: 15, total: 18 },
-    ],
-  },
-  {
-    id: "2",
-    name: "Smt. Priya Singh",
-    constituency: "Banjara Hills",
-    party: "Indian National Congress",
-    contact: "priya.singh@mla.gov.in",
-    phone: "+91 98765 43211",
-    image: "/api/placeholder/80/80",
-    performanceScore: 7.8,
-    issuesResolved: 128,
-    issuesPending: 35,
-    averageResolutionTime: 11,
-    responseRate: 87,
-    categories: [
-      { name: "Road Damage", resolved: 35, total: 40 },
-      { name: "Water Supply", resolved: 30, total: 38 },
-      { name: "Street Lights", resolved: 28, total: 35 },
-      { name: "Drainage", resolved: 22, total: 30 },
-      { name: "Others", resolved: 13, total: 17 },
-    ],
-  },
-  {
-    id: "3",
-    name: "Shri. Amit Patel",
-    constituency: "Hitech City",
-    party: "Telangana Rashtra Samithi",
-    contact: "amit.patel@mla.gov.in",
-    phone: "+91 98765 43212",
-    image: "/api/placeholder/80/80",
-    performanceScore: 6.9,
-    issuesResolved: 92,
-    issuesPending: 58,
-    averageResolutionTime: 14,
-    responseRate: 78,
-    categories: [
-      { name: "Road Damage", resolved: 25, total: 38 },
-      { name: "Water Supply", resolved: 20, total: 35 },
-      { name: "Street Lights", resolved: 18, total: 32 },
-      { name: "Drainage", resolved: 15, total: 28 },
-      { name: "Others", resolved: 14, total: 22 },
-    ],
-  },
-]
-
-export default function MLAReportCards() {
-  const [selectedMLA, setSelectedMLA] = useState<MLAData | null>(null)
-  const [sortBy, setSortBy] = useState<"score" | "resolved" | "pending">("score")
-  const [activeTab, setActiveTab] = useState<"overview" | "performance">("overview")
-
-  const sortedMLAs = [...mockMLAs].sort((a, b) => {
-    switch (sortBy) {
-      case "score":
-        return b.performanceScore - a.performanceScore
-      case "resolved":
-        return b.issuesResolved - a.issuesResolved
-      case "pending":
-        return a.issuesPending - b.issuesPending
-      default:
-        return 0
-    }
+  const [formData, setFormData] = useState({
+    title: "",
+    category: "",
+    description: "",
+    location: "",
+    severity: "LOW" as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
   })
+  const [photo, setPhoto] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState("")
+  const [uploadedImageUrl, setUploadedImageUrl] = useState("")
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false)
+  const [locationError, setLocationError] = useState("")
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState<string>("")
 
-  const getScoreColor = (score: number) => {
-    if (score >= 8) return "#10b981"
-    if (score >= 7) return "#eab308"
-    return "#ef4444"
-  }
-
-  const getScoreBg = (score: number) => {
-    if (score >= 8) return "#10b98114"
-    if (score >= 7) return "#eab30814"
-    return "#ef444414"
-  }
-
-  const performanceStats = [
-    {
-      label: "Total Performance",
-      value: "8.2",
-      change: "+2.1%",
-      icon: Award,
-      color: "#3b82f6"
-    },
-    {
-      label: "Avg Resolution Time",
-      value: "9.3 days",
-      change: "-1.2 days",
-      icon: Clock,
-      color: "#10b981"
-    },
-    {
-      label: "Satisfaction Rate",
-      value: "87%",
-      change: "+5%",
-      icon: TrendingUp,
-      color: "#eab308"
-    },
-    {
-      label: "Active Constituents",
-      value: "12,847",
-      change: "+342",
-      icon: Users,
-      color: "#8b5cf6"
+  useEffect(() => {
+    const storedEmail = localStorage.getItem("email")
+    if (storedEmail) {
+      setEmail(storedEmail)
     }
+  }, [])
+
+  const categories = ["Road Damage", "Pothole", "Street Light", "Water Supply", "Drainage", "Garbage", "Traffic", "Other"]
+  const severityLevels = [
+    { value: "LOW", label: "Low", color: "text-[#10b981]" },
+    { value: "MEDIUM", label: "Medium", color: "text-[#eab308]" },
+    { value: "HIGH", label: "High", color: "text-[#f97316]" },
+    { value: "CRITICAL", label: "Critical", color: "text-[#ef4444]" },
   ]
 
-  return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a] text-white" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <Navbar />
+  const getCurrentLocation = () => {
+    setIsLoadingLocation(true)
+    setLocationError("")
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser")
+      setIsLoadingLocation(false)
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords
+        setCoordinates({ latitude, longitude })
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`)
+          const data = await response.json()
+          const address = data.display_name || `${latitude}, ${longitude}`
+          setFormData(prev => ({ ...prev, location: address }))
+          
+        } catch (error) {
+          setFormData(prev => ({ ...prev, location: `${latitude}, ${longitude}` }))
+        }
+        setIsLoadingLocation(false)
+      },
+      (error) => {
+        setLocationError("Unable to get location. Please enter manually.")
+        setIsLoadingLocation(false)
+      }
+    )
+  }
 
-      <main className="flex-1 pt-24 pb-12">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10"
-          >
-            <div>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
-                MLA Performance Dashboard
-              </h1>
-              <p className="text-[#a1a1aa] text-sm mt-1.5 font-medium tracking-wide">
-                Transparent accountability for elected representatives
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const analyzeImageWithGemini = async (base64Image: string) => {
+    setIsAnalyzing(true)
+    setAiSuggestion("")
+    try {
+      const ai = new GoogleGenAI({ apiKey: "YOUR_GEMINI_API_KEY" })
+      
+      const prompt = `Analyze this civic issue image and provide the following information in JSON format only (no additional text):
+{
+  "title": "Brief, clear title (max 10 words)",
+  "category": "One of: Road Damage, Pothole, Street Light, Water Supply, Drainage, Garbage, Traffic, Other",
+  "description": "Detailed description of the issue (2-3 sentences)",
+  "severity": "One of: LOW, MEDIUM, HIGH, CRITICAL",
+  "reasoning": "Brief explanation of severity assessment"
+}
+
+Be specific about what you see in the image. For severity: LOW = minor cosmetic issues, MEDIUM = noticeable problems affecting daily use, HIGH = significant damage requiring urgent attention, CRITICAL = immediate safety hazard.`
+
+      // Convert base64 to the format Gemini expects
+      const base64Data = base64Image.split(',')[1]
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash-exp",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: base64Data
+                }
+              },
+              { text: prompt }
+            ]
+          }
+        ]
+      })
+
+      const resultText = response.text
+      
+      // Extract JSON from response
+      const jsonMatch = resultText!.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const analysis = JSON.parse(jsonMatch[0])
+        
+        // Auto-fill form fields
+        setFormData(prev => ({
+          ...prev,
+          title: analysis.title || prev.title,
+          category: analysis.category || prev.category,
+          description: analysis.description || prev.description,
+          severity: analysis.severity || prev.severity,
+        }))
+        
+        setAiSuggestion(`✨ AI Analysis: ${analysis.reasoning || "Image analyzed successfully"}`)
+      } else {
+        throw new Error("Could not parse AI response")
+      }
+      
+    } catch (error) {
+      console.error("Gemini AI analysis error:", error)
+      setAiSuggestion("⚠️ AI analysis failed. Please fill in the details manually.")
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  const uploadToCloudinary = async (file: File) => {
+    setIsUploading(true)
+    setUploadError("")
+    try {
+      const formDataObj = new FormData()
+      formDataObj.append('file', file)
+      formDataObj.append('upload_preset', 'ml_default')
+      formDataObj.append('api_key', '293268566572153')
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/dvmnmpdyy/image/upload`,
+        {
+          method: 'POST',
+          body: formDataObj
+        }
+      )
+      if (!response.ok) {
+        throw new Error('Upload failed')
+      }
+      const data = await response.json()
+      setUploadedImageUrl(data.secure_url)
+      return data.secure_url
+    } catch (error) {
+      setUploadError('Failed to upload image. Please try again.')
+      return null
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPhoto(file)
+      const reader = new FileReader()
+      reader.onloadend = async () => {
+        const base64 = reader.result as string
+        setPhotoPreview(base64)
+        
+        // Start AI analysis and cloud upload in parallel
+        const analysisPromise = analyzeImageWithGemini(base64)
+        const uploadPromise = uploadToCloudinary(file)
+        
+        await Promise.all([analysisPromise, uploadPromise])
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true)
+    setUploadError("")
+    try {
+      const citizenId = localStorage.getItem("id")
+      if (!citizenId) {
+        setUploadError("User not authenticated. Please login again.")
+        setIsSubmitting(false)
+        return
+      }
+      const mlaId = user?.currentMLA?.id || user?.mlaId
+      const issueData = {
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        location: formData.location,
+        severity: formData.severity,
+        citizenId: citizenId,
+        ...(mlaId && { mlaId: mlaId }),
+        ...(uploadedImageUrl && { mediaUrl: uploadedImageUrl }),
+        ...(coordinates?.latitude && { latitude: coordinates.latitude }),
+        ...(coordinates?.longitude && { longitude: coordinates.longitude }),
+      }
+      const response = await fetch("https://civiciobackend.vercel.app/api/v1/citizen/issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(issueData),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to submit issue")
+      }
+      setSubmitted(true)
+      setTimeout(() => {
+        window.location.href = "/citizen/dashboard"
+      }, 3000)
+    } catch (error: any) {
+      setUploadError(error.message || "An unexpected error occurred. Please try again.")
+      setIsSubmitting(false)
+    }
+  }
+
+  if (isLoadingUser || !email) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{background:'#0a0a0a'}}>
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin" style={{color:'#3b82f6',margin:'0 auto 1rem'}} />
+          <p style={{color:'#a1a1aa'}}>Loading your profile...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen py-12 px-4 mt-12" style={{background:'#0a0a0a',color:'#fff'}}>
+      <div className="max-w-2xl mx-auto">
+        <div>
+          <div className="mb-8 text-center">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <h1 className="text-4xl font-bold" style={{color:'#fff'}}>Report an Issue</h1>
+              <Sparkles className="w-6 h-6" style={{color:'#a855f7'}} />
+            </div>
+            <p style={{color:'#a1a1aa'}}>Help improve your city by reporting civic issues</p>
+            <p className="text-xs mt-1" style={{color:'#a855f7'}}>✨ Powered by Google Gemini AI</p>
+            {user?.currentMLA && (
+              <p className="text-sm mt-2" style={{color:'#3b82f6'}}>
+                📍 Your MLA: {user.currentMLA.name} ({user.constituency})
+              </p>
+            )}
+          </div>
+
+          {submitted ? (
+            <div className="border-2 rounded-lg p-8 text-center" style={{background:'#18181b',borderColor:'#10b981'}}>
+              <CheckCircle className="w-16 h-16 mx-auto mb-4" style={{color:'#10b981'}} />
+              <h2 className="text-2xl font-bold mb-2" style={{color:'#10b981'}}>Issue Reported Successfully</h2>
+              <p className="mb-4" style={{color:'#a1a1aa'}}>
+                Your report has been submitted to {user?.currentMLA?.name || "your MLA"}. 
+              </p>
+              <div className="rounded p-4 mb-4" style={{background:'#27272a',border:'1px solid #3b82f6'}}>
+                <p className="text-sm font-medium mb-2" style={{color:'#3b82f6'}}>
+                  ✉️ Confirmation Email Sent
+                </p>
+                <p className="text-xs" style={{color:'#71717a'}}>
+                  We've sent a confirmation email to <strong style={{color:'#d4d4d8'}}>{email}</strong> with all the issue details.
+                </p>
+              </div>
+              {uploadedImageUrl && (
+                <div className="rounded p-3 mb-4" style={{background:'#23232b'}}>
+                  <p className="text-sm mb-1 font-medium" style={{color:'#a1a1aa'}}>Image URL:</p>
+                  <p className="text-xs" style={{color:'#3b82f6',wordBreak:'break-all'}}>{uploadedImageUrl}</p>
+                </div>
+              )}
+              <p className="text-sm" style={{color:'#71717a'}}>
+                Redirecting to dashboard in 3 seconds...
               </p>
             </div>
-            
-            {/* Performance Overview */}
-            <div className="flex items-center gap-3">
-              <div className="px-3 py-1.5 rounded-[10px] border border-[#10b981] bg-[#10b98114] flex items-center gap-2">
-                <Award size={14} className="text-[#10b981]" />
-                <span className="text-xs font-semibold text-[#10b981]">Overall: 8.2/10</span>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Performance Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {performanceStats.map((stat, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="bg-[#18181b] border border-[#27272a] rounded-[10px] p-5 hover:border-[#3f3f46] transition-colors"
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: stat.color }}
+          ) : (
+            <div className="rounded-lg shadow-lg p-8 space-y-6" style={{background:'#18181b',border:'1px solid #27272a'}}>
+              {/* Photo Upload - Moved to top for AI analysis */}
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{color:'#d4d4d8'}}>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" style={{color:'#a855f7'}} />
+                    Upload Photo (AI-Powered Analysis)
+                    <span className="text-xs" style={{color:'#71717a'}}>(Optional)</span>
+                  </div>
+                </label>
+                <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer"
+                  style={{borderColor:isAnalyzing?'#a855f7':'#27272a',background:'#23232b',transition:'all 0.3s'}}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                    id="photo-input"
+                    disabled={isUploading || isAnalyzing}
                   />
-                  <stat.icon
-                    size={18}
-                    style={{ color: stat.color }}
-                    className="opacity-80"
-                  />
-                </div>
-                <p className="text-[#a1a1aa] text-xs font-medium tracking-wide uppercase mb-1.5">
-                  {stat.label}
-                </p>
-                <p className="text-3xl font-bold tracking-tight mb-1">
-                  {stat.value}
-                </p>
-                <p className="text-xs font-medium text-[#10b981]">
-                  {stat.change}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Main Content */}
-            <div className="flex-1 min-w-0">
-              {/* Sort Options */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex gap-1 mb-6 bg-[#18181b] border border-[#27272a] rounded-[10px] p-2"
-              >
-                {[
-                  { value: "score", label: "Top Performers", icon: Award },
-                  { value: "resolved", label: "Most Resolved", icon: CheckCircle },
-                  { value: "pending", label: "Least Pending", icon: Clock },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setSortBy(option.value as typeof sortBy)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-[8px] font-semibold text-sm transition-all flex-1 justify-center ${
-                      sortBy === option.value
-                        ? "bg-[#3b82f6] text-white"
-                        : "text-[#71717a] hover:text-[#a1a1aa] hover:bg-[#27272a]"
-                    }`}
-                  >
-                    <option.icon size={16} />
-                    {option.label}
-                  </button>
-                ))}
-              </motion.div>
-
-              {/* MLA Cards Grid */}
-              <div className="space-y-4">
-                {sortedMLAs.map((mla, idx) => (
-                  <motion.div
-                    key={mla.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.1 }}
-                    onClick={() => setSelectedMLA(mla)}
-                    className="bg-[#18181b] border border-[#27272a] rounded-[10px] overflow-hidden hover:border-[#3f3f46] transition-colors cursor-pointer group"
-                  >
-                    <div className="p-6">
-                      <div className="flex items-start gap-4">
-                        {/* MLA Image and Basic Info */}
-                        <div className="flex items-start gap-4 flex-1 min-w-0">
-                          <div className="w-16 h-16 rounded-full bg-[#27272a] flex items-center justify-center flex-shrink-0">
-                            <Users size={24} className="text-[#71717a]" />
+                  <label htmlFor="photo-input" className="cursor-pointer block">
+                    {isAnalyzing ? (
+                      <div className="space-y-2">
+                        <Sparkles className="w-8 h-8 mx-auto animate-pulse" style={{color:'#a855f7'}} />
+                        <p className="text-sm font-medium" style={{color:'#a855f7'}}>Gemini AI is analyzing your image...</p>
+                        <p className="text-xs" style={{color:'#71717a'}}>This may take a few seconds</p>
+                      </div>
+                    ) : isUploading ? (
+                      <div className="space-y-2">
+                        <Loader2 className="w-8 h-8 mx-auto animate-spin" style={{color:'#3b82f6'}} />
+                        <p className="text-sm font-medium" style={{color:'#3b82f6'}}>Uploading to cloud...</p>
+                      </div>
+                    ) : photoPreview ? (
+                      <div className="space-y-2">
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          className="w-32 h-32 object-cover mx-auto rounded"
+                        />
+                        {uploadedImageUrl && (
+                          <div className="flex items-center justify-center gap-2" style={{color:'#10b981'}}>
+                            <CheckCircle className="w-4 h-4" />
+                            <p className="text-sm font-medium">Uploaded successfully</p>
                           </div>
-                          
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between mb-3">
-                              <div>
-                                <h3 className="text-xl font-bold mb-1">{mla.name}</h3>
-                                <div className="flex items-center gap-3 text-sm">
-                                  <span className="text-[#a1a1aa] flex items-center gap-1">
-                                    <MapPin size={14} />
-                                    {mla.constituency}
-                                  </span>
-                                  <span className="text-[#3b82f6] font-semibold">{mla.party}</span>
-                                </div>
-                              </div>
-                              
-                              {/* Performance Score */}
-                              <div 
-                                className="px-3 py-2 rounded-[8px] border text-center flex-shrink-0"
-                                style={{
-                                  backgroundColor: getScoreBg(mla.performanceScore),
-                                  borderColor: getScoreColor(mla.performanceScore),
-                                }}
-                              >
-                                <p className="text-2xl font-bold" style={{ color: getScoreColor(mla.performanceScore) }}>
-                                  {mla.performanceScore}
-                                </p>
-                                <p className="text-xs" style={{ color: getScoreColor(mla.performanceScore) }}>
-                                  /10
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Quick Stats */}
-                            <div className="grid grid-cols-3 gap-4 mb-4">
-                              <div className="bg-[#10b98114] p-3 rounded-[8px] text-center border border-[#10b981]">
-                                <CheckCircle className="text-[#10b981] mx-auto mb-2" size={20} />
-                                <p className="text-2xl font-bold text-[#10b981]">{mla.issuesResolved}</p>
-                                <p className="text-xs text-[#10b981] font-medium">Resolved</p>
-                              </div>
-
-                              <div className="bg-[#eab30814] p-3 rounded-[8px] text-center border border-[#eab308]">
-                                <Clock className="text-[#eab308] mx-auto mb-2" size={20} />
-                                <p className="text-2xl font-bold text-[#eab308]">{mla.issuesPending}</p>
-                                <p className="text-xs text-[#eab308] font-medium">Pending</p>
-                              </div>
-
-                              <div className="bg-[#3b82f614] p-3 rounded-[8px] text-center border border-[#3b82f6]">
-                                <BarChart3 className="text-[#3b82f6] mx-auto mb-2" size={20} />
-                                <p className="text-2xl font-bold text-[#3b82f6]">{mla.responseRate}%</p>
-                                <p className="text-xs text-[#3b82f6] font-medium">Response</p>
-                              </div>
-                            </div>
-
-                            {/* Performance Bar */}
-                            <div className="mb-4">
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-sm font-semibold">Overall Performance</span>
-                                <span className="text-xs text-[#a1a1aa]">
-                                  Resolution: {mla.averageResolutionTime} days
-                                </span>
-                              </div>
-                              <div className="w-full bg-[#27272a] rounded-full h-2">
-                                <div
-                                  className="h-2 rounded-full transition-all"
-                                  style={{ 
-                                    width: `${(mla.performanceScore / 10) * 100}%`,
-                                    backgroundColor: getScoreColor(mla.performanceScore)
-                                  }}
-                                />
-                              </div>
-                            </div>
-
-                            {/* CTA */}
-                            <button className="w-full py-3 bg-[#3b82f614] text-[#3b82f6] font-semibold rounded-[8px] hover:bg-[#3b82f6] hover:text-white transition-colors group-hover:bg-[#3b82f6] group-hover:text-white">
-                              View Detailed Report
-                            </button>
-                          </div>
+                        )}
+                        <p className="text-sm" style={{color:'#71717a'}}>Click to change photo</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Upload className="w-8 h-8 mx-auto" style={{color:'#52525b'}} />
+                        <p className="text-sm font-medium" style={{color:'#d4d4d8'}}>Click to upload or drag and drop</p>
+                        <p className="text-xs" style={{color:'#71717a'}}>PNG, JPG up to 10MB</p>
+                        <div className="flex items-center justify-center gap-1 mt-2">
+                          <Sparkles className="w-3 h-3" style={{color:'#a855f7'}} />
+                          <p className="text-xs" style={{color:'#a855f7'}}>Gemini AI will auto-fill the form</p>
                         </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    )}
+                  </label>
+                </div>
+                {aiSuggestion && (
+                  <div className="mt-2 flex items-start gap-2 text-sm p-3 rounded-lg" style={{background:'#2e1065',borderLeft:'3px solid #a855f7'}}>
+                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{color:'#a855f7'}} />
+                    <p style={{color:'#e9d5ff'}}>{aiSuggestion}</p>
+                  </div>
+                )}
+                {uploadError && (
+                  <div className="mt-2 flex items-center gap-2 text-sm" style={{color:'#ef4444'}}>
+                    <AlertCircle className="w-4 h-4" />
+                    <p>{uploadError}</p>
+                  </div>
+                )}
               </div>
-            </div>
 
-            {/* Sidebar - Top Performers */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
-              className="lg:w-[320px] flex-shrink-0"
-            >
-              <div className="bg-[#18181b] border border-[#27272a] rounded-[10px] p-5 sticky top-24">
-                <h3 className="text-xs font-semibold text-[#a1a1aa] mb-4 uppercase tracking-wider">
-                  Top Performers
-                </h3>
-                <div className="space-y-3">
-                  {sortedMLAs.slice(0, 3).map((mla, index) => (
-                    <div
-                      key={mla.id}
-                      className="flex items-center gap-3 p-3 rounded-[8px] hover:bg-[#27272a] transition-colors cursor-pointer"
-                      onClick={() => setSelectedMLA(mla)}
-                    >
-                      <div className="w-8 h-8 rounded-full bg-[#27272a] flex items-center justify-center flex-shrink-0">
-                        <span className="text-xs font-bold text-[#3b82f6]">{index + 1}</span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold truncate">{mla.name}</p>
-                        <p className="text-xs text-[#a1a1aa] truncate">{mla.constituency}</p>
-                      </div>
-                      <div 
-                        className="px-2 py-1 rounded text-xs font-bold flex-shrink-0"
-                        style={{
-                          backgroundColor: getScoreBg(mla.performanceScore),
-                          color: getScoreColor(mla.performanceScore),
-                        }}
-                      >
-                        {mla.performanceScore}
-                      </div>
+              {/* AI Status Banner */}
+              {(isAnalyzing || isUploading) && (
+                <div className="rounded-lg p-4 border" style={{background:'#1e1b4b',borderColor:'#a855f7'}}>
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin" style={{color:'#c084fc'}} />
+                    <div>
+                      <p className="text-sm font-medium" style={{color:'#e9d5ff'}}>
+                        {isAnalyzing ? "🤖 Gemini AI is analyzing your image..." : "☁️ Uploading image..."}
+                      </p>
+                      <p className="text-xs" style={{color:'#c4b5fd'}}>
+                        {isAnalyzing ? "Form fields will be auto-filled shortly" : "Please wait"}
+                      </p>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Issue Title */}
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{color:'#d4d4d8'}}>Issue Title *</label>
+                <input
+                  type="text"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleInputChange}
+                  placeholder="Brief title of the issue"
+                  required
+                  className="w-full px-4 py-2 rounded-lg bg-[#23232b] border border-[#27272a] text-white focus:ring-2 focus:ring-[#a855f7] focus:border-transparent text-base"
+                  style={{transition:'all .15s'}}
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{color:'#d4d4d8'}}>Category *</label>
+                <select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 rounded-lg bg-[#23232b] border border-[#27272a] text-white focus:ring-2 focus:ring-[#a855f7] focus:border-transparent text-base"
+                >
+                  <option value="">Select a category</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{color:'#d4d4d8'}}>Location *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    name="location"
+                    value={formData.location}
+                    onChange={handleInputChange}
+                    placeholder="Enter address or use auto-detect"
+                    required
+                    className="flex-1 px-4 py-2 rounded-lg bg-[#23232b] border border-[#27272a] text-white focus:ring-2 focus:ring-[#a855f7] focus:border-transparent text-base"
+                  />
+                  <button
+                    type="button"
+                    onClick={getCurrentLocation}
+                    disabled={isLoadingLocation}
+                    className="px-4 py-2 bg-[#3b82f6] text-white rounded-lg hover:bg-[#2563eb] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+                  >
+                    {isLoadingLocation ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Detecting...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Auto-detect
+                      </>
+                    )}
+                  </button>
+                </div>
+                {locationError && (
+                  <p className="text-xs mt-1" style={{color:'#fde68a'}}>{locationError}</p>
+                )}
+                {coordinates && (
+                  <p className="text-xs mt-1" style={{color:'#10b981'}}>
+                    📍 Coordinates captured: {coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}
+                  </p>
+                )}
+              </div>
+
+              {/* Severity */}
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{color:'#d4d4d8'}}>Severity *</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {severityLevels.map((level) => (
+                    <button
+                      key={level.value}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, severity: level.value as any }))}
+                      className={
+                        `px-4 py-2 rounded-lg border-2 font-medium transition ` +
+                        (formData.severity === level.value
+                          ? `${level.color} border-current bg-[#23232b] bg-opacity-15`
+                          : 'border-[#27272a] text-[#a1a1aa] hover:text-white hover:border-[#52525b]')
+                      }
+                    >
+                      {level.label}
+                    </button>
                   ))}
                 </div>
-
-                {/* Quick Stats */}
-                <div className="mt-6 pt-6 border-t border-[#27272a]">
-                  <h3 className="text-xs font-semibold text-[#a1a1aa] mb-4 uppercase tracking-wider">
-                    Regional Overview
-                  </h3>
-                  <div className="space-y-1">
-                    {[
-                      { label: "Total MLAs", value: "3", icon: Users },
-                      { label: "Avg Performance", value: "7.7/10", icon: Activity },
-                      { label: "Total Resolved", value: "376", icon: CheckCircle },
-                      { label: "Avg Response Time", value: "11 days", icon: Clock },
-                    ].map((item, i) => (
-                      <div key={i}>
-                        <div className="flex items-center justify-between py-2">
-                          <div className="flex items-center gap-2.5">
-                            <item.icon size={14} className="text-[#71717a] flex-shrink-0" />
-                            <span className="text-xs font-medium text-[#d4d4d8]">
-                              {item.label}
-                            </span>
-                          </div>
-                          <span className="text-sm font-bold">{item.value}</span>
-                        </div>
-                        {i < 3 && <div className="h-px bg-[#27272a]" />}
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
-            </motion.div>
-          </div>
 
-          {/* Details Modal */}
-          {selectedMLA && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 pt-20"
-              onClick={() => setSelectedMLA(null)}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="bg-[#18181b] border border-[#27272a] rounded-[10px] max-w-4xl w-full max-h-[80vh] overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="p-8">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-8">
-                    <div className="flex gap-4">
-                      <div className="w-20 h-20 rounded-full bg-[#27272a] flex items-center justify-center flex-shrink-0">
-                        <Users size={32} className="text-[#71717a]" />
-                      </div>
-                      <div>
-                        <h2 className="text-3xl font-bold mb-2">{selectedMLA.name}</h2>
-                        <div className="flex items-center gap-4 text-sm mb-3">
-                          <span className="text-[#a1a1aa] flex items-center gap-1">
-                            <MapPin size={16} />
-                            {selectedMLA.constituency}
-                          </span>
-                          <span className="text-[#3b82f6] font-semibold">{selectedMLA.party}</span>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-[#a1a1aa]">
-                          <span className="flex items-center gap-1">
-                            <Mail size={14} />
-                            {selectedMLA.contact}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Phone size={14} />
-                            {selectedMLA.phone}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setSelectedMLA(null)}
-                      className="text-[#a1a1aa] hover:text-white text-2xl p-2 hover:bg-[#27272a] rounded-[8px] transition-colors"
-                    >
-                      ×
-                    </button>
-                  </div>
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{color:'#d4d4d8'}}>Description *</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  placeholder="Detailed description of the issue"
+                  rows={4}
+                  required
+                  className="w-full px-4 py-2 rounded-lg bg-[#23232b] border border-[#27272a] text-white focus:ring-2 focus:ring-[#a855f7] focus:border-transparent resize-none"
+                />
+              </div>
 
-                  {/* Tabs */}
-                  <div className="flex gap-1 border-b border-[#27272a] mb-6">
-                    {[
-                      { value: "overview", label: "Overview" },
-                      { value: "performance", label: "Performance" },
-                    ].map((tab) => (
-                      <button
-                        key={tab.value}
-                        onClick={() => setActiveTab(tab.value as typeof activeTab)}
-                        className={`flex items-center gap-2 px-6 h-[48px] font-semibold transition-colors relative text-sm ${
-                          activeTab === tab.value
-                            ? "text-[#3b82f6]"
-                            : "text-[#71717a] hover:text-[#a1a1aa]"
-                        }`}
-                      >
-                        {tab.label}
-                        {activeTab === tab.value && (
-                          <motion.div
-                            layoutId="activeTab"
-                            className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#3b82f6]"
-                          />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Tab Content */}
-                  {activeTab === "overview" ? (
-                    <div className="space-y-6">
-                      {/* Performance Metrics */}
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="bg-[#10b98114] border border-[#10b981] rounded-[10px] p-6 text-center">
-                          <p className="text-sm text-[#10b981] font-semibold mb-2">Issues Resolved</p>
-                          <p className="text-4xl font-bold text-[#10b981]">{selectedMLA.issuesResolved}</p>
-                        </div>
-
-                        <div className="bg-[#eab30814] border border-[#eab308] rounded-[10px] p-6 text-center">
-                          <p className="text-sm text-[#eab308] font-semibold mb-2">Issues Pending</p>
-                          <p className="text-4xl font-bold text-[#eab308]">{selectedMLA.issuesPending}</p>
-                        </div>
-
-                        <div className="bg-[#3b82f614] border border-[#3b82f6] rounded-[10px] p-6 text-center">
-                          <p className="text-sm text-[#3b82f6] font-semibold mb-2">Avg Resolution Time</p>
-                          <p className="text-4xl font-bold text-[#3b82f6]">{selectedMLA.averageResolutionTime}</p>
-                          <p className="text-sm text-[#3b82f6]">days</p>
-                        </div>
-
-                        <div className="bg-[#8b5cf614] border border-[#8b5cf6] rounded-[10px] p-6 text-center">
-                          <p className="text-sm text-[#8b5cf6] font-semibold mb-2">Response Rate</p>
-                          <p className="text-4xl font-bold text-[#8b5cf6]">{selectedMLA.responseRate}%</p>
-                        </div>
-                      </div>
-
-                      {/* Performance Score */}
-                      <div 
-                        className="rounded-[10px] p-6 border text-center"
-                        style={{
-                          backgroundColor: getScoreBg(selectedMLA.performanceScore),
-                          borderColor: getScoreColor(selectedMLA.performanceScore),
-                        }}
-                      >
-                        <p className="text-sm font-semibold mb-2 text-[#a1a1aa]">Overall Performance Score</p>
-                        <p className="text-5xl font-bold mb-3" style={{ color: getScoreColor(selectedMLA.performanceScore) }}>
-                          {selectedMLA.performanceScore} / 10
-                        </p>
-                        <p className="text-sm text-[#d4d4d8]">
-                          {selectedMLA.performanceScore >= 8
-                            ? "Excellent performance in resolving citizen issues"
-                            : selectedMLA.performanceScore >= 7
-                              ? "Good performance with room for improvement"
-                              : "Needs significant improvement in issue resolution"}
-                        </p>
-                      </div>
-                    </div>
+              {/* Submit Button */}
+              <div className="flex gap-4 pt-4">
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || isUploading || isAnalyzing || !formData.title || !formData.category || !formData.location || !formData.description}
+                  className="flex-1 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition"
+                  style={{background:'#3b82f6',color:'#fff',boxShadow:'0 2px 8px 0 rgba(59,130,246,.09)',opacity:isSubmitting||isUploading||isAnalyzing||!formData.title||!formData.category||!formData.location||!formData.description?0.6:1,pointerEvents:isSubmitting||isUploading||isAnalyzing||!formData.title||!formData.category||!formData.location||!formData.description? 'none':'auto'}}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : isUploading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Uploading photo...
+                    </>
+                  ) : isAnalyzing ? (
+                    <>
+                      <Sparkles className="w-5 h-5 animate-pulse" />
+                      AI Analyzing...
+                    </>
                   ) : (
-                    <div className="space-y-6">
-                      {/* Category Breakdown */}
-                      <div>
-                        <h3 className="text-xl font-bold mb-4">Issue Category Performance</h3>
-                        <div className="space-y-4">
-                          {selectedMLA.categories.map((cat) => (
-                            <div key={cat.name} className="bg-[#27272a] rounded-[8px] p-4">
-                              <div className="flex justify-between items-center mb-3">
-                                <p className="font-semibold">{cat.name}</p>
-                                <span className="text-sm text-[#a1a1aa]">
-                                  {cat.resolved} / {cat.total} ({Math.round((cat.resolved / cat.total) * 100)}%)
-                                </span>
-                              </div>
-                              <div className="w-full bg-[#0a0a0a] rounded-full h-2">
-                                <div
-                                  className="h-2 rounded-full transition-all"
-                                  style={{ 
-                                    width: `${(cat.resolved / cat.total) * 100}%`,
-                                    backgroundColor: getScoreColor((cat.resolved / cat.total) * 10)
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    "Submit Report"
                   )}
+                </button>
+                <button
+                  onClick={() => window.history.back()}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 rounded-lg font-semibold transition"
+                  style={{border:'2px solid #27272a',color:'#d4d4d8',background:'#23232b'}}
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {(!formData.title || !formData.category || !formData.location || !formData.description) && !isSubmitting && (
+                <div className="flex items-start gap-2 text-sm p-3 rounded-lg border mt-2"
+                  style={{background:'#312e81',borderColor:'#818cf8',color:'#fbbf24'}}>
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium mb-1">Please complete all required fields:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-xs">
+                      {!formData.title && <li>Issue Title</li>}
+                      {!formData.category && <li>Category</li>}
+                      {!formData.location && <li>Location</li>}
+                      {!formData.description && <li>Description</li>}
+                    </ul>
+                    <div className="flex items-center gap-1 mt-2">
+                      <Sparkles className="w-3 h-3" style={{color:'#c7d2fe'}} />
+                      <p className="text-xs" style={{color:'#c7d2fe'}}>💡 Tip: Upload a photo and Gemini AI will fill these for you!</p>
+                    </div>
+                  </div>
                 </div>
-              </motion.div>
-            </motion.div>
+              )}
+
+              {uploadError && !isUploading && (
+                <div className="mt-2 flex items-center gap-2 text-sm p-3 rounded-lg"
+                  style={{background:'#450a0a',color:'#ef4444'}}>
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <p>{uploadError}</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
-      </main>
+      </div>
     </div>
   )
 }
