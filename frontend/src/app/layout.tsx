@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider as NextThemesProvider } from "next-themes"
 import { ReactQueryProvider } from "./providers"
 import "./globals.css"
+import { Navbar } from "./_components/navbar"
 
 const geist = Geist({ 
   subsets: ["latin"],
@@ -24,6 +25,7 @@ export default function RootLayout({
       <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}>
         <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
           <ReactQueryProvider>
+            <Navbar />
             {children}
           </ReactQueryProvider>
         </NextThemesProvider>

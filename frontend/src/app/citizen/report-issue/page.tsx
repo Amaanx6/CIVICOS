@@ -227,7 +227,7 @@ export default function ReportIssue() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-50 py-12 px-4">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-50 py-12 px-4 mt-12">
       <div className="max-w-2xl mx-auto">
         <div>
           <div className="mb-8 text-center">

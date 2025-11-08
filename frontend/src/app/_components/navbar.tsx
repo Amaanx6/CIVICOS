@@ -19,7 +19,7 @@ export function Navbar() {
     { href: "/", label: "Home" },
     { href: "/citizen/report-issue", label: "Report Issue" },
     { href: "/citizen/map", label: "Map" },
-    { href: "/citizen/leaderboard", label: "Leaderboard" },
+    { href: "/citizen/leaderboards", label: "Leaderboard" },
     { href: "/citizen/mla-report", label: "MLA Report" },
   ]
 
