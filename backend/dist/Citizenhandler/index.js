@@ -222,3 +222,111 @@ exports.citizenHandler.get("/all", (req, res) => __awaiter(void 0, void 0, void 
         });
     }
 }));
+// Enhanced GET endpoint to fetch all issues with optional filters
+exports.citizenHandler.get("/issues", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { status, severity, category, constituency, citizenId, mlaId, organizationId, limit, offset } = req.query;
+    try {
+        // Build dynamic filter object
+        const where = {};
+        if (status) {
+            where.status = status;
+        }
+        if (severity) {
+            where.severity = severity;
+        }
+        if (category) {
+            where.category = category;
+        }
+        if (citizenId) {
+            where.citizenId = String(citizenId);
+        }
+        if (mlaId) {
+            where.mlaId = String(mlaId);
+        }
+        if (organizationId) {
+            where.organizationId = String(organizationId);
+        }
+        // Filter by constituency (through citizen, MLA, or organization)
+        if (constituency) {
+            where.OR = [
+                { citizen: { constituency: String(constituency) } },
+                { mla: { constituency: String(constituency) } },
+                { organization: { constituency: String(constituency) } }
+            ];
+        }
+        // Parse pagination parameters
+        const limitNum = limit ? parseInt(String(limit)) : undefined;
+        const offsetNum = offset ? parseInt(String(offset)) : undefined;
+        // Fetch issues with filters and includes
+        const [issues, totalCount] = yield Promise.all([
+            prisma.issue.findMany(Object.assign(Object.assign({ where, include: {
+                    citizen: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            constituency: true,
+                        },
+                    },
+                    mla: {
+                        select: {
+                            id: true,
+                            name: true,
+                            party: true,
+                            constituency: true,
+                            email: true,
+                            phone: true,
+                            rating: true,
+                        },
+                    },
+                    organization: {
+                        select: {
+                            id: true,
+                            name: true,
+                            category: true,
+                            constituency: true,
+                            contact_email: true,
+                            contact_phone: true,
+                            address: true,
+                        },
+                    },
+                }, orderBy: {
+                    createdAt: 'desc',
+                } }, (limitNum && { take: limitNum })), (offsetNum && { skip: offsetNum }))),
+            prisma.issue.count({ where })
+        ]);
+        return res.status(200).json({
+            success: true,
+            count: issues.length,
+            totalCount,
+            issues: issues.map((issue) => ({
+                id: issue.id,
+                title: issue.title,
+                description: issue.description,
+                category: issue.category,
+                mediaUrl: issue.mediaUrl,
+                location: issue.location,
+                latitude: issue.latitude,
+                longitude: issue.longitude,
+                status: issue.status,
+                severity: issue.severity,
+                citizenId: issue.citizenId,
+                mlaId: issue.mlaId,
+                organizationId: issue.organizationId,
+                createdAt: issue.createdAt,
+                updatedAt: issue.updatedAt,
+                citizen: issue.citizen,
+                mla: issue.mla,
+                organization: issue.organization,
+            })),
+        });
+    }
+    catch (error) {
+        console.error("Error fetching issues:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: process.env.NODE_ENV === 'development' ? String(error) : undefined
+        });
+    }
+}));
